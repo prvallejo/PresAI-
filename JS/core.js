@@ -63,8 +63,13 @@ const PresAi = {
         if (moduloActual !== '') {
             const licencia = localStorage.getItem(`presai_key_${moduloActual}`);
             if (!licencia) {
-                console.warn(`Alerta: Módulo ${moduloActual} no activado.`);
-                // Aquí en el Paso 3 dispararemos el Modal
+            console.warn(`[PresAi] Acceso denegado a: ${moduloActual}`);
+            
+            // Verificamos si el Guardián (auth.js) está cargado
+            if (typeof PresAiAuth !== 'undefined') {
+                PresAiAuth.solicitarActivacion(moduloActual);
+            } else {
+                console.error("Error crítico: No se encontró el archivo js/auth.js");
             }
         }
     }
