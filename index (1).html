@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+    <title>PresAI — Presupuesto de Obra</title>
+    
+    <!-- Librerías Externas -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    
+    <!-- Estilos Externos -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Diálogo genérico: cambios sin guardar -->
+<div class="close-dialog-overlay" id="unsaved-guard-overlay">
+  <div class="close-dialog">
+    <h4>💾 Guardar cambios?</h4>
+    <p id="unsaved-guard-msg">Hay cambios sin guardar en el proyecto activo.</p>
+    <div class="close-dialog-btns">
+      <button class="close-btn-save"   onclick="unsavedGuardSave()">💾 Guardar</button>
+      <button class="close-btn-exit"   onclick="unsavedGuardDiscard()">Descartar</button>
+      <button class="close-btn-cancel" onclick="unsavedGuardCancel()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE 6: Custom close dialog (legacy alias — mantiene compatibilidad) -->
+<div class="close-dialog-overlay" id="close-dialog-overlay">
+  <div class="close-dialog">
+    <h4>⚠️ Cambios sin guardar</h4>
+    <p>Tienes cambios que no han sido guardados.<br>¿Qué deseas hacer?</p>
+    <div class="close-dialog-btns">
+      <button class="close-btn-save" onclick="closeDialogSaveAndExit()">💾 Guardar y salir</button>
+      <button class="close-btn-cancel" onclick="closeDialogCancel()">Cancelar</button>
+      <button class="close-btn-exit" onclick="closeDialogExitAnyway()">Salir de todas formas</button>
+    </div>
+  </div>
+</div>
+
+<!-- Diálogo especial: proyecto nuevo sin nombre de obra -->
+<div class="close-dialog-overlay" id="close-noname-overlay">
+  <div class="close-dialog">
+    <h4>⚠️ Proyecto sin nombre</h4>
+    <p>Si cierra sin ingresar el <strong>Nombre del proyecto</strong>,<br>perderá todo lo realizado.</p>
+    <div class="close-dialog-btns">
+      <button class="close-btn-save" onclick="closeNoNameGoCreate()">✏️ Crear proyecto</button>
+      <button class="close-btn-exit" onclick="closeNoNameExitAnyway()">Salir y perder todo</button>
+    </div>
+  </div>
+</div>
+
+<div id="rotate-warning">
+  <svg viewBox="0 0 24 24"><path d="M23.25 12.77l-2.57-2.57c-.51-.51-1.18-.77-1.85-.77H5.17c-.67 0-1.34.26-1.85.77L.75 12.77c-.51.51-.51 1.34 0 1.85l2.57 2.57c.51.51 1.18.77 1.85.77h13.66c.67 0 1.34-.26 1.85-.77l2.57-2.57c.51-.51.51-1.34 0-1.85zM17.5 15H6.5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5h11c.28 0 .5.22.5.5s-.22.5-.5.5z"/></svg>
+  <h2>Gira tu dispositivo</h2>
+  <p>Para una mejor experiencia en PresAI, por favor usa tu celular o tableta en modo horizontal.</p>
+</div>
+
+<!-- CHANGE 7: Wow screen with full background image -->
+<div id="wow-screen">
+  <h1>Pres<span>AI</span></h1>
+  <p>Software avanzado de presupuesto de obras</p>
+  <div class="wow-buttons">
+    <button class="wow-btn primary" onclick="openProjects()">📂 Mis Proyectos</button>
+  </div>
+</div>
+
+<div class="app" id="main-app" style="display:none">
+  <header class="hdr no-print">
+    <div class="hdr-left">
+      <div class="hdr-logo-wrap" id="logoWrap" onclick="openSettings('informe')" title="Personalizar logo empresa">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </div>
+      <div class="hdr-txt" id="hdrBrand">
+        <div class="name">Pres<span>AI</span></div>
+        <div class="sub" id="hdrCompanyName">V26.7.3</div>
+      </div>
+      <div class="hdr-proj" id="hdrProj">
+        <div class="hdr-proj-name" id="hdrProjName">Sin proyecto</div>
+      </div>
+    </div>
+    <div class="hdr-right">
+      <!-- Botón Módulos -->
+      <div class="mod-btn-wrap" id="modBtnWrap">
+        <button class="mod-btn" id="modMainBtn" onclick="toggleModDropdown(event)" title="Módulos de gestión">
+          <span style="font-size:13px">⚡</span> Módulos <span class="mod-chevron">▼</span>
+        </button>
+        <div class="mod-dropdown" id="modDropdown">
+          <div class="mod-dd-header">Módulos disponibles</div>
+          <div class="mod-dd-item" onclick="switchToModule('compras')">
+            <span class="mod-icon">🛒</span>
+            <span class="mod-name">Compras</span>
+            <span class="mod-status active-s"><span class="mod-dot active"></span>Activo</span>
+          </div>
+          <div class="mod-dd-item disabled" title="Próximamente">
+            <span class="mod-icon">💰</span>
+            <span class="mod-name">Gastos</span>
+            <span class="mod-status inactive-s"><span class="mod-dot inactive"></span><span class="mod-tag">Próximo</span></span>
+          </div>
+          <div class="mod-dd-item disabled" title="Próximamente">
+            <span class="mod-icon">📅</span>
+            <span class="mod-name">Gantt</span>
+            <span class="mod-status inactive-s"><span class="mod-dot inactive"></span><span class="mod-tag">Próximo</span></span>
+          </div>
+          <div class="mod-dd-item disabled" title="Próximamente">
+            <span class="mod-icon">📊</span>
+            <span class="mod-name">EEPP</span>
+            <span class="mod-status inactive-s"><span class="mod-dot inactive"></span><span class="mod-tag">Próximo</span></span>
+          </div>
+        </div>
+      </div>
+      <button class="hbtn-emoji" onclick="openProjects()" title="Mis Proyectos">📂</button>
+      <button class="hbtn-emoji" onclick="doPrint()" title="Imprimir PDF">🖨️</button>
+      <button class="hbtn-emoji" onclick="previewReport()" title="Vista Previa">👁️</button>
+      <button class="hbtn-emoji" id="save-main-btn" onclick="saveProject()" title="Guardar proyecto">
+        💾
+        <span id="save-auto-badge" class="auto-badge"></span>
+      </button>
+      <div class="hdr-sep"></div>
+      <button class="hbtn-emoji" onclick="openSettings()" title="Configuración">⚙️</button>
+      <div class="hdr-sep"></div>
+      <button class="hbtn-emoji danger" onclick="closeApp()" title="Cerrar">✕ <span class="lbl">Cerrar</span></button>
+    </div>
+  </header>
+
+  <nav class="tabs no-print">
+    <div class="tabs-list">
+      <div class="tab on" onclick="sw('bud',this)">Presupuesto</div>
+      <div class="tab" onclick="sw('gg',this)">Gastos Generales</div>
+      <div class="tab" id="tab-apu" onclick="sw('apu',this)">Análisis Unitarios</div>
+      <div class="tab" id="tab-cub" onclick="sw('cub',this)">Cubicaciones</div>
+      <div class="tab" id="tab-notes" onclick="sw('notes',this)">Notas</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;padding-right:10px">
+
+      <button id="tabs-undo-btn" onclick="undoMain()" title="Sin cambios para deshacer"
+        style="display:none;height:30px;padding:0 13px;border:1.5px solid var(--border2);border-radius:6px;background:var(--bg2);color:var(--txt2);font-size:11px;font-family:var(--ff);font-weight:700;cursor:default;white-space:nowrap;transition:all .18s;letter-spacing:.2px;box-shadow:none;line-height:30px;vertical-align:middle;align-items:center;justify-content:center;pointer-events:none;opacity:0.42"
+        onmouseover="if(undoStackMain.length>0){this.style.background='var(--amber)';this.style.color='#fff';}"
+        onmouseout="if(undoStackMain.length>0){this.style.background='var(--amber-lt)';this.style.color='var(--amber)';}">↩&nbsp;Deshacer&nbsp;<span id="undo-count-badge" style="display:none;background:var(--amber);color:#fff;border-radius:9px;padding:0 5px;font-size:10px;font-weight:800;line-height:16px;min-width:16px;text-align:center"></span></button>
+    </div>
+  </nav>
+
+  <main class="content">
+    <div id="p-bud" class="pnl on">
+      <input type="hidden" id="pObra" value=""/>
+      <input type="hidden" id="pMandante" value=""/>
+      <input type="hidden" id="pUbicacion" value=""/>
+      <input type="hidden" id="pProfesional" value=""/>
+      <input type="hidden" id="pFecha" value=""/>
+      <input type="hidden" id="pPayment" value=""/>
+      <input type="hidden" id="pExecution" value=""/>
+      <div class="tbl-outer">
+          <div class="tbl-wrap-hdr" id="tbl-wrap-hdr">
+            <div class="tbl-hdr" id="tbl-hdr-sticky">
+              <span></span><span>Ítem</span><span>Descripción de la Partida</span><span class="c">Unid</span><span class="r">Cant.</span><span class="r" id="hdr-punit">P.Unit. ($)</span><span class="r" id="hdr-total">Total ($)</span><span></span><span></span>
+            </div>
+          </div>
+        <div class="tbl-wrap" id="tbl-wrap-scroll">
+          <div class="tbl-inner">
+            <div id="brows"></div>
+            <div class="tbl-add no-print">
+              <button class="bs addp" onclick="addCh()">+ Nuevo Capítulo</button>
+              <button class="bs addp" onclick="addIt()">+ Nueva Partida</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tot-card">
+        <div id="totals" class="totals-left"></div>
+        <div class="cfg-side no-print">
+          <div class="cfg-lbl">Parámetros de Cálculo</div>
+          <div class="cr">
+            <div style="display:flex;align-items:center;gap:6px">
+              <label>Gastos Generales (%)</label>
+              <label style="font-size:9px;color:var(--txt3);cursor:pointer;display:flex;align-items:center;gap:3px;white-space:nowrap">
+                <input type="checkbox" id="ggFijo" onchange="rc();markUnsaved()"/> Usar % fijo
+              </label>
+            </div>
+            <input type="number" id="pGG" value="15" oninput="rc();markUnsaved()" onfocus="this.select()"/>
+          </div>
+          <div class="cr"><label>Utilidad (%)</label><input type="number" id="pUtil" value="12" oninput="rc();markUnsaved()" onfocus="this.select()"/></div>
+          <div class="cr"><label>Imprevistos (%)</label><input type="number" id="pImp" value="0" oninput="rc();markUnsaved()" onfocus="this.select()"/></div>
+          <div class="cr"><label>IVA (%)</label><input type="number" id="pIVA" value="19" oninput="rc();markUnsaved()" onfocus="this.select()"/></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GG panel -->
+    <div id="p-gg" class="pnl">
+      <div class="no-print" id="gg-toolbar" style="position:sticky;top:94px;z-index:25;background:var(--bg);border-bottom:1px solid var(--border);padding:7px 0;display:flex;align-items:center;justify-content:flex-end;margin-bottom:12px">
+        <div id="gg-toolbar-select"></div>
+      </div>
+      <div id="gg-subgroups-container"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0 4px;border-top:2px solid var(--border)" id="gg-footer-row">
+        <button class="btn-p blue no-print" onclick="saveProject();sw('bud',document.querySelector('.tab'))" style="display:flex;align-items:center;gap:6px;padding:9px 20px">
+          💾 Guardar y cerrar
+        </button>
+        <span style="font-weight:600;color:var(--navy);font-size:14px" id="gg-total-label">Total Gastos Generales: $ 0</span>
+      </div>
+    </div>
+
+    <div id="p-apu" class="pnl">
+      <div id="apu-list-empty" style="padding:40px;text-align:center;color:var(--txt3)">No hay Análisis de Precios Unitarios creados aún.</div>
+      <div id="apu-list-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px"></div>
+    </div>
+
+    <div id="p-cub" class="pnl">
+      <div id="cub-list-empty" style="padding:40px;text-align:center;color:var(--txt3)">No hay Cubicaciones creadas aún.</div>
+      <div id="cub-list-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px"></div>
+    </div>
+
+    <div id="p-notes" class="pnl">
+      <div class="tbl-wrap" style="padding:20px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h3 style="color:var(--navy);font-size:16px">Notas Generales del Proyecto</h3>
+          <button class="btn-p blue" onclick="addGeneralNote()">+ Nueva Nota</button>
+        </div>
+        <div id="general-notes-list" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- CHANGE 5: AI Chat dialog & Float button -->
+<button class="float-btn" id="aiFloatBtn" title="Asistente PresAI (IA)">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+</button>
+
+<div class="ai-chat-dialog" id="aiChatDialog">
+  <div class="ai-chat-hdr" id="aiChatHdr">
+    <div class="ai-chat-hdr-left">
+      <div class="ai-dev-badge">DEV</div>
+      <div style="display:flex;flex-direction:column">
+        <span class="ai-chat-hdr-title">Asistente PresAI</span>
+        <span class="ai-chat-hdr-sub">Inteligencia Artificial</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px">
+      <button class="ai-chat-close" id="aiChatSplitBtn" title="Modo dividido">↔</button>
+      <button class="ai-chat-close" id="aiChatCloseBtn">✕</button>
+    </div>
+  </div>
+  <div class="ai-chat-body" id="aiChatBody">
+    <div class="ai-chat-msg">
+      <div class="bubble">¡Hola! Soy el asistente de PresAI. ¿En qué puedo ayudarte con tu presupuesto hoy?</div>
+    </div>
+  </div>
+  <div class="ai-chat-input-bar">
+    <button class="ai-chat-attach" title="Adjuntar archivo" onclick="alert('Adjuntar: IA en desarrollo')">📎</button>
+    <input class="ai-chat-input" id="aiChatInput" placeholder="Escribe un mensaje... (IA en desarrollo)" onkeydown="if(event.key==='Enter')sendAiMsg()"/>
+    <button class="ai-chat-mic" title="Micrófono" onclick="alert('Micrófono: IA en desarrollo')">🎙️</button>
+  </div>
+</div>
+
+<div class="ov" id="ov"><div id="mc"></div></div>
+
+<!-- Lógica Principal -->
+<script src="global-logic.js"></script>
+
+</body>
+</html>
