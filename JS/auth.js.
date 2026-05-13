@@ -1,0 +1,45 @@
+/**
+ * PresAi Auth - El Guardián de Licencias
+ */
+const PresAiAuth = {
+    // Configura aquí tus códigos (luego esto vendrá de tu API en Railway)
+    llavesValidas: {
+        'presupuesto': 'PRES-2026-VAL',
+        'compras': 'COMP-2026-VAL',
+        'solar': 'SOL-2026-VAL'
+    },
+
+    solicitarActivacion: function(modulo) {
+        // Crear el fondo oscuro
+        const overlay = document.createElement('div');
+        overlay.id = 'modal-auth-overlay';
+        overlay.style = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; display:flex; align-items:center; justify-content:center; font-family:sans-serif;";
+
+        // Crear la caja del modal
+        overlay.innerHTML = `
+            <div style="background:white; padding:30px; border-radius:8px; max-width:400px; width:90%; text-align:center; border-top: 5px solid #1e3a5f;">
+                <h2 style="color:#1e3a5f; margin-bottom:10px;">Activar Módulo ${modulo.toUpperCase()}</h2>
+                <p style="color:#666; font-size:0.9rem; margin-bottom:20px;">Este módulo requiere una licencia profesional. Ingrese su código de activación.</p>
+                <input type="text" id="input-key" placeholder="XXXX-XXXX-XXXX" style="width:100%; padding:12px; margin-bottom:20px; border:1px solid #ccc; border-radius:4px; text-align:center; font-family:monospace; font-size:1.1rem;">
+                <button onclick="PresAiAuth.validar('${modulo}')" style="width:100%; padding:12px; background:#1e3a5f; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">ACTIVAR AHORA</button>
+                <p id="auth-error" style="color:red; font-size:0.8rem; margin-top:10px; display:none;">Código inválido. Intente nuevamente.</p>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    },
+
+    validar: function(modulo) {
+        const input = document.getElementById('input-key').value.trim();
+        const errorMsg = document.getElementById('auth-error');
+
+        // Por ahora validamos contra nuestro objeto local
+        if (input === this.llavesValidas[modulo]) {
+            localStorage.setItem(`presai_key_${modulo}`, input);
+            alert("¡Módulo activado con éxito!");
+            location.reload(); // Recarga para mostrar el contenido
+        } else {
+            errorMsg.style.display = 'block';
+            input.value = '';
+        }
+    }
+};
